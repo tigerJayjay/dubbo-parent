@@ -43,7 +43,7 @@ public class ConsistentHashLoadBalance extends AbstractLoadBalance {
     @Override
     protected <T> Invoker<T> doSelect(List<Invoker<T>> invokers, URL url, Invocation invocation) {
         String methodName = RpcUtils.getMethodName(invocation);
-        String key = invokers.get(0).getUrl().getServiceKey() + "." + methodName;
+        String key = invokers.get(0).getUrl().getServiceKey() + "." + methodName;//接口全限定名+方法名
         int identityHashCode = System.identityHashCode(invokers);
         ConsistentHashSelector<T> selector = (ConsistentHashSelector<T>) selectors.get(key);
         if (selector == null || selector.identityHashCode != identityHashCode) {
@@ -76,10 +76,11 @@ public class ConsistentHashLoadBalance extends AbstractLoadBalance {
             for (Invoker<T> invoker : invokers) {
                 String address = invoker.getUrl().getAddress();
                 for (int i = 0; i < replicaNumber / 4; i++) {
-                    byte[] digest = md5(address + i);
+                    byte[] digest = md5(address + i);//虚拟节点的地址=源地址+编号(0-39)
                     for (int h = 0; h < 4; h++) {
+                        //四次循环第一次对前0-3字节hash，第二次对4-7字节hash,第三次对8-11字节hash，第四次对12-15字节hash
                         long m = hash(digest, h);
-                        virtualInvokers.put(m, invoker);
+                        virtualInvokers.put(m, invoker);//虚拟节点的hash值与invoker对象的映射
                     }
                 }
             }
@@ -109,7 +110,14 @@ public class ConsistentHashLoadBalance extends AbstractLoadBalance {
             return entry.getValue();
         }
 
+        /**
+         * 降低hash冲突概率
+         * @param digest
+         * @param number
+         * @return
+         */
         private long hash(byte[] digest, int number) {
+            //&0xFF是为了保持二进制数据的一致性，参考:http://www.cnblogs.com/think-in-java/p/5527389.html
             return (((long) (digest[3 + number * 4] & 0xFF) << 24)
                     | ((long) (digest[2 + number * 4] & 0xFF) << 16)
                     | ((long) (digest[1 + number * 4] & 0xFF) << 8)

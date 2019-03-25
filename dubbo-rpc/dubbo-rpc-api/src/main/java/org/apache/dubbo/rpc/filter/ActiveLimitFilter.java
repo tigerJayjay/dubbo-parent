@@ -46,7 +46,10 @@ public class ActiveLimitFilter implements Filter {
         URL url = invoker.getUrl();
         String methodName = invocation.getMethodName();
         int max = invoker.getUrl().getMethodParameter(methodName, Constants.ACTIVES_KEY, 0);
+        //RpcStatus中所有的field都是线程安全的，并且每个url的每个方法对应一个RpcStatus，缓存在ConcurrentMap中，所以整个过程，每个method都只有
+        //一个RpcStatus对象，因此可以作为同一个方法调用的锁使用
         RpcStatus count = RpcStatus.getStatus(invoker.getUrl(), invocation.getMethodName());
+        //当前连接数是否大于设置的最大连接数
         if (!count.beginCount(url, methodName, max)) {
             long timeout = invoker.getUrl().getMethodParameter(invocation.getMethodName(), Constants.TIMEOUT_KEY, 0);
             long start = System.currentTimeMillis();
@@ -54,6 +57,7 @@ public class ActiveLimitFilter implements Filter {
             synchronized (count) {
                 while (!count.beginCount(url, methodName, max)) {
                     try {
+                        //如果加上当前连接大于最大连接数，当前线程阻塞remain时间之后继续获取锁
                         count.wait(remain);
                     } catch (InterruptedException e) {
                         // ignore
